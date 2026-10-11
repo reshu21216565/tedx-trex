@@ -221,7 +221,14 @@ export function App() {
           </div>
         )}
 
-        {activeTab === 'setup' && <SetupGuide />}
+        {activeTab === 'setup' && (
+          <SetupGuide
+            isSupabaseLive={isSupabaseLive}
+            ticketCount={tickets.length}
+            onSeedOfficialLedger={handleSeedOfficial49Ledger}
+            onRefresh={refreshData}
+          />
+        )}
       </main>
 
       {/* Ticket Preview & Export Modal */}

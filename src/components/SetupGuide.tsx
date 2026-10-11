@@ -3,15 +3,29 @@ import {
   Database,
   Copy,
   Check,
+  Sparkles,
+  RefreshCw,
 } from 'lucide-react';
 
+interface SetupGuideProps {
+  isSupabaseLive?: boolean;
+  ticketCount?: number;
+  onSeedOfficialLedger?: () => void;
+  onRefresh?: () => void;
+}
 
-export const SetupGuide: React.FC = () => {
+export const SetupGuide: React.FC<SetupGuideProps> = ({
+  isSupabaseLive = false,
+  ticketCount = 0,
+  onSeedOfficialLedger,
+  onRefresh,
+}) => {
   const [copiedSql, setCopiedSql] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
+  const [seeding, setSeeding] = useState(false);
 
-  const envSnippet = `VITE_SUPABASE_URL=https://your-project.supabase.co
-VITE_SUPABASE_ANON_KEY=your-anon-public-key
+  const envSnippet = `VITE_SUPABASE_URL=https://ogvyerjhlrogxyiccyuk.supabase.co
+VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 VITE_EVENT_NAME=TEDx GeethanjaliCET
 VITE_EVENT_VENUE=Block 4 Auditorium`;
 
@@ -152,17 +166,87 @@ CREATE POLICY "Allow check in event logging" ON public.check_in_events FOR INSER
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="bg-[#14151c] rounded-2xl border border-[#2b2d3d] p-6">
-        <div className="flex items-center gap-3 mb-2">
-          <Database className="w-6 h-6 text-[#eb0028]" />
-          <h2 className="text-xl font-bold text-white">Database & Supabase Production Setup</h2>
+      {/* Live Status Card */}
+      {isSupabaseLive ? (
+        <div className="bg-gradient-to-r from-emerald-950/50 via-[#14151c] to-[#14151c] rounded-2xl border border-emerald-500/40 p-6 shadow-xl shadow-emerald-950/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-3 w-3 relative">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+                </span>
+                <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                  Supabase Live Database Connected
+                </span>
+              </div>
+              <h2 className="text-xl font-bold text-white">
+                Live PostgreSQL Backend Active
+              </h2>
+              <p className="text-xs text-zinc-300">
+                Connected to endpoint: <code className="text-emerald-300 font-mono">https://ogvyerjhlrogxyiccyuk.supabase.co</code>
+              </p>
+              <div className="pt-2 text-xs text-zinc-400">
+                Current Database State:{' '}
+                <strong className="text-white">
+                  {ticketCount} {ticketCount === 1 ? 'ticket' : 'tickets'} stored
+                </strong>
+                {ticketCount === 0 && (
+                  <span className="text-amber-300 ml-1">
+                    (Schema initialized, ready for initial ticket data)
+                  </span>
+                )}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 shrink-0">
+              {onSeedOfficialLedger && (
+                <button
+                  onClick={async () => {
+                    setSeeding(true);
+                    try {
+                      await onSeedOfficialLedger();
+                    } finally {
+                      setSeeding(false);
+                    }
+                  }}
+                  disabled={seeding}
+                  className="flex items-center justify-center gap-2 px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold rounded-xl text-xs transition-all shadow-lg shadow-emerald-900/40 cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-emerald-200" />
+                  <span>
+                    {seeding
+                      ? 'Syncing 49 Tickets...'
+                      : ticketCount === 0
+                      ? 'Load 49 Official Tickets to Supabase'
+                      : 'Re-Sync 49 Official Tickets'}
+                  </span>
+                </button>
+              )}
+
+              {onRefresh && (
+                <button
+                  onClick={onRefresh}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-xl text-xs font-medium border border-zinc-700 transition-colors cursor-pointer"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Refresh Connection Data</span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
-        <p className="text-xs text-zinc-400 max-w-2xl">
-          Follow these 3 steps to configure your live PostgreSQL database on Supabase before tomorrow's event.
-          Until configured, the application safely runs in Local Sandbox Mode.
-        </p>
-      </div>
+      ) : (
+        <div className="bg-[#14151c] rounded-2xl border border-amber-500/30 p-6">
+          <div className="flex items-center gap-3 mb-2">
+            <Database className="w-6 h-6 text-amber-400" />
+            <h2 className="text-xl font-bold text-white">Local Sandbox Mode Active</h2>
+          </div>
+          <p className="text-xs text-zinc-400 max-w-2xl">
+            The app is currently running safely in Local Sandbox Mode. Follow the steps below to connect your live Supabase project.
+          </p>
+        </div>
+      )}
 
       {/* Step 1: Create Supabase Project */}
       <div className="bg-[#14151c] rounded-2xl border border-[#2b2d3d] p-6 space-y-3">
