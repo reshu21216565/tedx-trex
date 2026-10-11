@@ -5,6 +5,7 @@ import {
   Check,
   Sparkles,
   RefreshCw,
+  Trash2,
 } from 'lucide-react';
 
 interface SetupGuideProps {
@@ -12,6 +13,7 @@ interface SetupGuideProps {
   ticketCount?: number;
   onSeedOfficialLedger?: () => void;
   onRefresh?: () => void;
+  onOpenClearModal?: () => void;
 }
 
 export const SetupGuide: React.FC<SetupGuideProps> = ({
@@ -19,6 +21,7 @@ export const SetupGuide: React.FC<SetupGuideProps> = ({
   ticketCount = 0,
   onSeedOfficialLedger,
   onRefresh,
+  onOpenClearModal,
 }) => {
   const [copiedSql, setCopiedSql] = useState(false);
   const [copiedEnv, setCopiedEnv] = useState(false);
@@ -231,6 +234,16 @@ CREATE POLICY "Allow check in event logging" ON public.check_in_events FOR INSER
                 >
                   <RefreshCw className="w-3.5 h-3.5" />
                   <span>Refresh Connection Data</span>
+                </button>
+              )}
+
+              {ticketCount > 0 && onOpenClearModal && (
+                <button
+                  onClick={onOpenClearModal}
+                  className="flex items-center justify-center gap-1.5 px-4 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 rounded-xl text-xs font-medium border border-rose-500/30 transition-colors cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                  <span>Erase Database & Start Fresh</span>
                 </button>
               )}
             </div>

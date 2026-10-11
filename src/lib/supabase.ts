@@ -167,6 +167,40 @@ export async function fetchCheckInEvents(): Promise<{ data: CheckInEvent[]; erro
 }
 
 /**
+ * Erases all ticket records and check-in audit logs from the database
+ * to allow starting completely fresh with a new spreadsheet upload.
+ */
+export async function clearAllTicketsAndEvents(): Promise<{ success: boolean; error: string | null }> {
+  if (isSupabaseConfigured() && supabase) {
+    try {
+      // 1. Delete audit events
+      await supabase
+        .from('check_in_events')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      // 2. Delete tickets
+      const { error: ticketsError } = await supabase
+        .from('tickets')
+        .delete()
+        .neq('id', '00000000-0000-0000-0000-000000000000');
+
+      if (ticketsError) {
+        return { success: false, error: ticketsError.message };
+      }
+
+      return { success: true, error: null };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to clear Supabase database' };
+    }
+  }
+
+  // Sandbox fallback
+  sandboxStore.clear();
+  return { success: true, error: null };
+}
+
+/**
  * Concurrency-Safe Atomic Check-In Operation
  *
  * Verifies token or ticket ID, checks status, locks record, prevents duplicate check-in,

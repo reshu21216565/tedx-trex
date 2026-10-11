@@ -8,6 +8,7 @@ import {
   RefreshCw,
   Download,
   Check,
+  Trash2,
 } from 'lucide-react';
 import type { ColumnMapping, ImportPreviewRow, ImportSummary, Ticket } from '../types';
 import {
@@ -27,12 +28,14 @@ interface ImportModalProps {
   existingTickets: Ticket[];
   onClose: () => void;
   onImportComplete: (summary: ImportSummary) => void;
+  onOpenClearModal?: () => void;
 }
 
 export const ImportModal: React.FC<ImportModalProps> = ({
   existingTickets,
   onClose,
   onImportComplete,
+  onOpenClearModal,
 }) => {
   const [step, setStep] = useState<'upload' | 'mapping' | 'preview' | 'summary'>('upload');
   const [parsedWb, setParsedWb] = useState<ParsedWorkbook | null>(null);
@@ -179,6 +182,31 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         {/* STEP 1: UPLOAD OR LOAD SAMPLE */}
         {step === 'upload' && (
           <div className="space-y-6 py-4">
+            {existingTickets.length > 0 && (
+              <div className="p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 text-xs text-zinc-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="px-2 py-0.5 rounded-md bg-zinc-800 font-bold text-white text-[11px]">
+                    {existingTickets.length} Tickets Currently in Database
+                  </span>
+                  <span className="text-zinc-400">
+                    New uploads merge idempotently. Need a blank slate first?
+                  </span>
+                </div>
+                {onOpenClearModal && (
+                  <button
+                    onClick={() => {
+                      onClose();
+                      onOpenClearModal();
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950/50 hover:bg-rose-900/60 text-rose-300 font-semibold text-xs border border-rose-500/30 transition-colors cursor-pointer shrink-0"
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                    <span>Erase Existing Tickets First</span>
+                  </button>
+                )}
+              </div>
+            )}
+
             <div className="border-2 border-dashed border-[#2b2d3d] rounded-2xl p-8 text-center hover:border-[#eb0028]/60 transition-colors bg-[#0d0e12]/50">
               <FileSpreadsheet className="w-12 h-12 text-[#eb0028] mx-auto mb-3" />
               <h3 className="text-base font-bold text-white">Upload Event Workbook</h3>

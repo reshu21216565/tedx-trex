@@ -11,6 +11,7 @@ import {
   RefreshCw,
   CheckSquare,
   Square,
+  Trash2,
 } from 'lucide-react';
 import type { EmailDeliveryStatus, Ticket } from '../types';
 import { bulkExportTicketsZip } from '../lib/ticketExporter';
@@ -24,6 +25,7 @@ interface TicketRegistryProps {
   onToggleCheckIn: (ticket: Ticket) => void;
   onUpdateDeliveryStatus: (ticketId: string, status: EmailDeliveryStatus) => void;
   onRefresh: () => void;
+  onOpenClearModal?: () => void;
 }
 
 export const TicketRegistry: React.FC<TicketRegistryProps> = ({
@@ -33,6 +35,7 @@ export const TicketRegistry: React.FC<TicketRegistryProps> = ({
   onToggleCheckIn,
   onUpdateDeliveryStatus,
   onRefresh,
+  onOpenClearModal,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [passTypeFilter, setPassTypeFilter] = useState('ALL');
@@ -203,6 +206,17 @@ export const TicketRegistry: React.FC<TicketRegistryProps> = ({
             >
               <RefreshCw className="w-4 h-4" />
             </button>
+
+            {tickets.length > 0 && onOpenClearModal && (
+              <button
+                onClick={onOpenClearModal}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 text-xs font-semibold border border-rose-500/30 transition-colors cursor-pointer"
+                title="Erase all tickets from database for a fresh upload"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                <span className="hidden sm:inline">Erase All</span>
+              </button>
+            )}
           </div>
         </div>
 

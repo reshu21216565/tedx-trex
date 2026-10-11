@@ -10,6 +10,7 @@ import { EmailModal } from './components/EmailModal';
 import { SetupGuide } from './components/SetupGuide';
 import type { EmailDeliveryStatus, ImportSummary, Ticket, CheckInEvent } from './types';
 import {
+  clearAllTicketsAndEvents,
   fetchAllTickets,
   fetchCheckInEvents,
   isSupabaseConfigured,
@@ -18,7 +19,7 @@ import {
 } from './lib/supabase';
 import { SAMPLE_TEDX_LEDGER_DATA } from './lib/sampleData';
 import { prepareImportPreview, executeIdempotentImport } from './lib/spreadsheet';
-import { FileSpreadsheet } from 'lucide-react';
+import { FileSpreadsheet, Trash2 } from 'lucide-react';
 
 
 export function App() {
@@ -28,6 +29,8 @@ export function App() {
   const [selectedTicket, setSelectedTicket] = useState<Ticket | null>(null);
   const [emailModalTicket, setEmailModalTicket] = useState<Ticket | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [showClearConfirmModal, setShowClearConfirmModal] = useState(false);
+  const [isClearing, setIsClearing] = useState(false);
   const [loading, setLoading] = useState(true);
   const isSupabaseLive = isSupabaseConfigured();
 
@@ -56,6 +59,24 @@ export function App() {
   useEffect(() => {
     refreshData();
   }, []);
+
+  // Handler to permanently erase all tickets from database for fresh upload
+  const handleClearAllTickets = async () => {
+    setIsClearing(true);
+    try {
+      const res = await clearAllTicketsAndEvents();
+      if (!res.success) {
+        alert('Failed to erase tickets: ' + (res.error || 'Unknown error'));
+        return;
+      }
+      setTickets([]);
+      setEvents([]);
+      setShowClearConfirmModal(false);
+      await refreshData();
+    } finally {
+      setIsClearing(false);
+    }
+  };
 
   // Handler for completing spreadsheet import
   const handleImportComplete = async (summary: ImportSummary) => {
@@ -196,6 +217,7 @@ export function App() {
             onToggleCheckIn={handleToggleCheckIn}
             onUpdateDeliveryStatus={handleUpdateDeliveryStatus}
             onRefresh={refreshData}
+            onOpenClearModal={() => setShowClearConfirmModal(true)}
           />
         )}
 
@@ -227,6 +249,7 @@ export function App() {
             ticketCount={tickets.length}
             onSeedOfficialLedger={handleSeedOfficial49Ledger}
             onRefresh={refreshData}
+            onOpenClearModal={() => setShowClearConfirmModal(true)}
           />
         )}
       </main>
@@ -255,7 +278,46 @@ export function App() {
           existingTickets={tickets}
           onClose={() => setShowImportModal(false)}
           onImportComplete={handleImportComplete}
+          onOpenClearModal={() => setShowClearConfirmModal(true)}
         />
+      )}
+
+      {/* Confirmation Modal to Erase All Tickets */}
+      {showClearConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-[#14151c] rounded-2xl border border-rose-500/30 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-rose-500/10 rounded-xl text-rose-400">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Erase Entire Ticket Registry?</h3>
+                <p className="text-xs text-zinc-400">Allows uploading a fresh spreadsheet</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-zinc-300 leading-relaxed">
+              This will permanently delete all <strong>{tickets.length}</strong> attendee tickets, QR codes, and check-in audit records from your database. You will then have a completely blank slate to upload a fresh Excel/CSV file.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => setShowClearConfirmModal(false)}
+                disabled={isClearing}
+                className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-xl text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleClearAllTickets}
+                disabled={isClearing}
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition-all shadow-lg shadow-rose-950/40 cursor-pointer flex items-center gap-1.5"
+              >
+                {isClearing ? 'Erasing...' : 'Yes, Erase Everything'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
