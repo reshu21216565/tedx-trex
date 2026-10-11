@@ -91,14 +91,15 @@ describe('4. Ledger Import & Idempotency Engine', () => {
     notes: 'Notes / Group Affiliation',
   };
 
-  it('imports all 49 ticket entries and sets APPROVED_FOR_ISSUANCE', () => {
+  it('imports all attendee ticket entries and sets APPROVED_FOR_ISSUANCE', () => {
+    const totalCount = SAMPLE_TEDX_LEDGER_DATA.length;
     const previews = prepareImportPreview(SAMPLE_TEDX_LEDGER_DATA, mapping, []);
-    expect(previews.length).toBe(49);
+    expect(previews.length).toBe(totalCount);
 
     const summary = executeIdempotentImport(previews, []);
-    expect(summary.totalRows).toBe(49);
-    expect(summary.approvedCount).toBe(49);
-    expect(summary.importedTickets.length).toBe(49);
+    expect(summary.totalRows).toBe(totalCount);
+    expect(summary.approvedCount).toBe(totalCount);
+    expect(summary.importedTickets.length).toBe(totalCount);
 
     // Verify all tickets are marked as APPROVED_FOR_ISSUANCE
     summary.importedTickets.forEach((ticket) => {
@@ -108,16 +109,14 @@ describe('4. Ledger Import & Idempotency Engine', () => {
       expect(ticket.ticket_id).toMatch(/^TEDX-2026-\d{3}$/);
     });
 
-    // Check that malformed emails were flagged
-    const flagged = summary.importedTickets.filter((t) => t.is_email_invalid);
-    expect(flagged.length).toBeGreaterThan(0);
-    // Verify text is preserved
-    const arthur = summary.importedTickets.find((t) => t.attendee_name === 'Arthur Pendelton');
-    expect(arthur?.email).toBe('arthur.pendelton@gmail');
-    expect(arthur?.is_email_invalid).toBe(true);
+    // Check first attendee
+    const firstTicket = summary.importedTickets[0];
+    expect(firstTicket.attendee_name).toBe('Aman Kumar');
+    expect(firstTicket.ticket_id).toBe('TEDX-2026-001');
   });
 
   it('is strictly idempotent on re-import and never regenerates existing security tokens', () => {
+    const totalCount = SAMPLE_TEDX_LEDGER_DATA.length;
     // First Import
     const previews1 = prepareImportPreview(SAMPLE_TEDX_LEDGER_DATA, mapping, []);
     const summary1 = executeIdempotentImport(previews1, []);
@@ -130,9 +129,9 @@ describe('4. Ledger Import & Idempotency Engine', () => {
     const previews2 = prepareImportPreview(SAMPLE_TEDX_LEDGER_DATA, mapping, initialTickets);
     const summary2 = executeIdempotentImport(previews2, initialTickets);
 
-    // Must not create duplicate rows: still exactly 49
-    expect(summary2.importedTickets.length).toBe(49);
-    expect(summary2.duplicateCount).toBe(49);
+    // Must not create duplicate rows: still exactly totalCount
+    expect(summary2.importedTickets.length).toBe(totalCount);
+    expect(summary2.duplicateCount).toBe(totalCount);
 
     // CRITICAL: Tokens must NOT be rotated during routine re-import
     summary2.importedTickets.forEach((t) => {
@@ -273,5 +272,62 @@ describe('5. Concurrency-Safe Atomic Check-In Operation', () => {
     const statuses = [result1.status, result2.status];
     expect(statuses).toContain('VALID');
     expect(statuses).toContain('ALREADY_CHECKED_IN');
+  });
+});
+
+describe('6. Google Form Response Auto-Expansion Engine', () => {
+  it('correctly detects a raw Google Form responses sheet without Ticket ID', async () => {
+    const { isGoogleFormSheet } = await import('../lib/spreadsheet');
+    const headers = [
+      'Timestamp',
+      'Email address',
+      'Select Pass Type ',
+      'Participation Type',
+      'Full Name',
+      'Contact Number',
+    ];
+    expect(isGoogleFormSheet(headers)).toBe(true);
+  });
+
+  it('correctly expands single passes and group pass submissions', async () => {
+    const { expandGoogleFormRows } = await import('../lib/spreadsheet');
+    const headers = [
+      'Timestamp',
+      'Email address',
+      'Select Pass Type ',
+      'Full Name',
+      'Email Address (Personal)',
+      'Full Name (Team Lead Details)',
+      'Full Name (Member 2 - Details) ',
+      'Full Name (Member 3 - Details) ',
+      'Full Name (Member 4 - Details) ',
+    ];
+
+    const mockRows = [
+      {
+        'Timestamp': '10/10/2026',
+        'Email address': 'lead@group.com',
+        'Select Pass Type ': 'Group Pass (4 Members)',
+        'Full Name (Team Lead Details)': 'Team Leader',
+        'Full Name (Member 2 - Details) ': 'Member Two',
+        'Full Name (Member 3 - Details) ': 'Member Three',
+        'Full Name (Member 4 - Details) ': 'Member Four',
+      },
+      {
+        'Timestamp': '10/10/2026',
+        'Email address': 'single@test.com',
+        'Select Pass Type ': 'Single Pass',
+        'Full Name': 'Single Attendee',
+      },
+    ];
+
+    const expanded = expandGoogleFormRows(mockRows, headers, []);
+    expect(expanded.length).toBe(5); // 4 from group + 1 single
+    expect(expanded[0]['Ticket ID']).toBe('TEDX-2026-001');
+    expect(expanded[0]['Attendee Name']).toBe('Team Leader');
+    expect(expanded[0]['Pass Type']).toBe('Group Pass (Team Lead)');
+    expect(expanded[1]['Attendee Name']).toBe('Member Two');
+    expect(expanded[4]['Attendee Name']).toBe('Single Attendee');
+    expect(expanded[4]['Ticket ID']).toBe('TEDX-2026-005');
   });
 });

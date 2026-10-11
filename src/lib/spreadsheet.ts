@@ -8,6 +8,194 @@ export interface ParsedWorkbook {
   activeSheet: string;
   headers: string[];
   rawRows: Record<string, any>[];
+  isGoogleFormExpanded?: boolean;
+  originalRowCount?: number;
+}
+
+/**
+ * Checks if a sheet has the structure of a Google Form Responses spreadsheet
+ */
+export function isGoogleFormSheet(headers: string[]): boolean {
+  const headerStr = headers.join(' ').toLowerCase();
+  const hasTimestamp = headerStr.includes('timestamp');
+  const hasPassType = headerStr.includes('pass type') || headerStr.includes('participation');
+  const hasTicketId = headers.some((h) => /^ticket[\s_-]?id$/i.test(h.trim()));
+  return hasTimestamp && (hasPassType || headerStr.includes('full name')) && !hasTicketId;
+}
+
+/**
+ * Expands Google Form rows: separates individual single passes and expands multi-member group passes.
+ */
+export function expandGoogleFormRows(
+  rows: Record<string, any>[],
+  _headers?: string[],
+  existingTickets: Ticket[] = []
+): Record<string, any>[] {
+  let maxIdNum = 0;
+  existingTickets.forEach((t) => {
+    const m = t.ticket_id.match(/(\d+)$/);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      if (num > maxIdNum) maxIdNum = num;
+    }
+  });
+
+  const expandedRows: Record<string, any>[] = [];
+
+  rows.forEach((row) => {
+    const entries = Object.entries(row);
+    let passTypeVal = '';
+    let submitterEmail = '';
+    let txnId = '';
+
+    for (const [k, v] of entries) {
+      if (!v) continue;
+      const strVal = String(v).trim();
+      const key = k.toLowerCase().trim();
+
+      if (key.includes('pass type') || key.includes('select pass type')) {
+        passTypeVal = strVal;
+      }
+      if (key === 'email address' || (key.includes('email') && !submitterEmail)) {
+        submitterEmail = strVal;
+      }
+      if (key.includes('transaction id') || key.includes('txn')) {
+        txnId = strVal;
+      }
+    }
+
+    if (/group/i.test(passTypeVal)) {
+      // Group Pass: Extract Team Lead and Members 2, 3, 4
+      let tlName = '';
+      let tlEmail = '';
+      let tlNotes = '';
+
+      let m2Name = '';
+      let m2Notes = '';
+
+      let m3Name = '';
+      let m3Notes = '';
+
+      let m4Name = '';
+      let m4Notes = '';
+
+      for (const [k, v] of entries) {
+        if (!v || !String(v).trim()) continue;
+        const val = String(v).trim();
+        const key = k.toLowerCase().trim();
+
+        if (key.includes('team lead') && (key.includes('name') || key.includes('full name'))) {
+          tlName = val;
+        } else if (key.includes('team lead') && key.includes('email')) {
+          tlEmail = val;
+        } else if (key.includes('team lead') && (key.includes('branch') || key.includes('college') || key.includes('roll') || key.includes('profession'))) {
+          tlNotes += ` ${val}`;
+        }
+
+        if (key.includes('member 2') && (key.includes('name') || key.includes('full name') || key.includes('details'))) {
+          if (!key.includes('contact') && !key.includes('roll') && !key.includes('college')) {
+            m2Name = val;
+          }
+        } else if (key.includes('member 2') && (key.includes('roll') || key.includes('college'))) {
+          m2Notes += ` ${val}`;
+        }
+
+        if (key.includes('member 3') && (key.includes('name') || key.includes('full name') || key.includes('details'))) {
+          if (!key.includes('contact') && !key.includes('roll') && !key.includes('college')) {
+            m3Name = val;
+          }
+        } else if (key.includes('member 3') && (key.includes('roll') || key.includes('college'))) {
+          m3Notes += ` ${val}`;
+        }
+
+        if (key.includes('member 4') && (key.includes('name') || key.includes('full name') || key.includes('details'))) {
+          if (!key.includes('contact') && !key.includes('roll') && !key.includes('college')) {
+            m4Name = val;
+          }
+        } else if (key.includes('member 4') && (key.includes('roll') || key.includes('college'))) {
+          m4Notes += ` ${val}`;
+        }
+      }
+
+      if (tlName) {
+        maxIdNum++;
+        expandedRows.push({
+          'Ticket ID': `TEDX-2026-${String(maxIdNum).padStart(3, '0')}`,
+          'Attendee Name': tlName,
+          'Email Address': tlEmail || submitterEmail,
+          'Pass Type': 'Group Pass (Team Lead)',
+          'Notes / Group Affiliation': `Group Lead${txnId ? ` | Txn: ${txnId}` : ''}${tlNotes ? ` | ${tlNotes.trim()}` : ''}`,
+          'Transaction ID': txnId,
+        });
+      }
+      if (m2Name) {
+        maxIdNum++;
+        expandedRows.push({
+          'Ticket ID': `TEDX-2026-${String(maxIdNum).padStart(3, '0')}`,
+          'Attendee Name': m2Name,
+          'Email Address': submitterEmail,
+          'Pass Type': 'Group Pass (Member 2)',
+          'Notes / Group Affiliation': `Group Member 2 | Lead: ${tlName}${m2Notes ? ` | ${m2Notes.trim()}` : ''}`,
+          'Transaction ID': txnId,
+        });
+      }
+      if (m3Name) {
+        maxIdNum++;
+        expandedRows.push({
+          'Ticket ID': `TEDX-2026-${String(maxIdNum).padStart(3, '0')}`,
+          'Attendee Name': m3Name,
+          'Email Address': submitterEmail,
+          'Pass Type': 'Group Pass (Member 3)',
+          'Notes / Group Affiliation': `Group Member 3 | Lead: ${tlName}${m3Notes ? ` | ${m3Notes.trim()}` : ''}`,
+          'Transaction ID': txnId,
+        });
+      }
+      if (m4Name) {
+        maxIdNum++;
+        expandedRows.push({
+          'Ticket ID': `TEDX-2026-${String(maxIdNum).padStart(3, '0')}`,
+          'Attendee Name': m4Name,
+          'Email Address': submitterEmail,
+          'Pass Type': 'Group Pass (Member 4)',
+          'Notes / Group Affiliation': `Group Member 4 | Lead: ${tlName}${m4Notes ? ` | ${m4Notes.trim()}` : ''}`,
+          'Transaction ID': txnId,
+        });
+      }
+    } else {
+      // Single Pass
+      let name = '';
+      let email = '';
+      let extraNotes = '';
+
+      for (const [k, v] of entries) {
+        if (!v || !String(v).trim()) continue;
+        const val = String(v).trim();
+        const key = k.toLowerCase().trim();
+
+        if ((key.includes('name') || key.includes('full name')) && !key.includes('college') && !key.includes('lead') && !key.includes('member')) {
+          if (!name) name = val;
+        }
+        if (key.includes('email') && key !== 'email address' && !key.includes('lead')) {
+          if (!email) email = val;
+        }
+        if (key.includes('roll') || key.includes('branch') || key.includes('college name') || key.includes('profession') || key.includes('year of study')) {
+          extraNotes += ` ${val}`;
+        }
+      }
+
+      maxIdNum++;
+      expandedRows.push({
+        'Ticket ID': `TEDX-2026-${String(maxIdNum).padStart(3, '0')}`,
+        'Attendee Name': name || 'Attendee',
+        'Email Address': email || submitterEmail,
+        'Pass Type': 'General Admission',
+        'Notes / Group Affiliation': `${txnId ? `Txn: ${txnId} | ` : ''}${extraNotes.trim()}`,
+        'Transaction ID': txnId,
+      });
+    }
+  });
+
+  return expandedRows;
 }
 
 /**
@@ -23,12 +211,32 @@ export async function parseSpreadsheetFile(file: File): Promise<ParsedWorkbook> 
       header: true,
       skipEmptyLines: true,
     });
-    const headers = parsed.meta.fields || [];
+    let headers = parsed.meta.fields || [];
+    let rawRows = parsed.data;
+
+    let isGoogleFormExpanded = false;
+    const originalRowCount = rawRows.length;
+
+    if (isGoogleFormSheet(headers)) {
+      rawRows = expandGoogleFormRows(rawRows, headers);
+      headers = [
+        'Ticket ID',
+        'Attendee Name',
+        'Email Address',
+        'Pass Type',
+        'Notes / Group Affiliation',
+        'Transaction ID',
+      ];
+      isGoogleFormExpanded = true;
+    }
+
     return {
       sheetNames: ['CSV Upload'],
       activeSheet: 'CSV Upload',
       headers,
-      rawRows: parsed.data,
+      rawRows,
+      isGoogleFormExpanded,
+      originalRowCount,
     };
   }
 
@@ -39,25 +247,42 @@ export async function parseSpreadsheetFile(file: File): Promise<ParsedWorkbook> 
   // Auto-detect "Ticket Ledger" or similar sheet name
   let targetSheet = sheetNames.find((s) => /ticket\s*ledger/i.test(s));
   if (!targetSheet) {
-    // If not found, look for "ledger" or default to the first sheet
     targetSheet = sheetNames.find((s) => /ledger/i.test(s)) || sheetNames[0];
   }
 
   const worksheet = workbook.Sheets[targetSheet];
-  const rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
+  let rawRows = XLSX.utils.sheet_to_json<Record<string, any>>(worksheet, { defval: '' });
 
   // Extract all distinct headers
   const headersSet = new Set<string>();
   rawRows.forEach((row) => {
     Object.keys(row).forEach((k) => headersSet.add(k));
   });
-  const headers = Array.from(headersSet);
+  let headers = Array.from(headersSet);
+
+  let isGoogleFormExpanded = false;
+  const originalRowCount = rawRows.length;
+
+  if (isGoogleFormSheet(headers)) {
+    rawRows = expandGoogleFormRows(rawRows, headers);
+    headers = [
+      'Ticket ID',
+      'Attendee Name',
+      'Email Address',
+      'Pass Type',
+      'Notes / Group Affiliation',
+      'Transaction ID',
+    ];
+    isGoogleFormExpanded = true;
+  }
 
   return {
     sheetNames,
     activeSheet: targetSheet,
     headers,
     rawRows,
+    isGoogleFormExpanded,
+    originalRowCount,
   };
 }
 
@@ -73,14 +298,16 @@ export function suggestColumnMappings(headers: string[]): ColumnMapping {
     return '';
   };
 
+  const matchedTicketId = findMatch([
+    /^ticket[\s_-]?id$/i,
+    /^ticket[\s_-]?number$/i,
+    /^ticket$/i,
+    /^id$/i,
+    /ticket/i,
+  ]);
+
   return {
-    ticket_id: findMatch([
-      /^ticket[\s_-]?id$/i,
-      /^ticket[\s_-]?number$/i,
-      /^ticket$/i,
-      /^id$/i,
-      /ticket/i,
-    ]),
+    ticket_id: matchedTicketId || '__AUTO_GENERATE__',
     attendee_name: findMatch([
       /^attendee[\s_-]?name$/i,
       /^full[\s_-]?name$/i,
@@ -122,19 +349,52 @@ export function prepareImportPreview(
   const existingTicketIdMap = new Set(existingTickets.map((t) => t.ticket_id.toUpperCase().trim()));
   const seenInFileTicketIds = new Set<string>();
 
+  let nextAutoId = 1;
+  existingTickets.forEach((t) => {
+    const m = t.ticket_id.match(/(\d+)$/);
+    if (m) {
+      const num = parseInt(m[1], 10);
+      if (num >= nextAutoId) nextAutoId = num + 1;
+    }
+  });
+
   return rows.map((row, index) => {
-    const rawTicketId = mapping.ticket_id ? String(row[mapping.ticket_id] || '').trim() : '';
-    const rawName = mapping.attendee_name ? String(row[mapping.attendee_name] || '').trim() : '';
-    const rawEmail = mapping.email ? String(row[mapping.email] || '').trim() : '';
+    let rawTicketId = mapping.ticket_id && mapping.ticket_id !== '__AUTO_GENERATE__'
+      ? String(row[mapping.ticket_id] || '').trim()
+      : '';
+
+    // Auto-generate sequential ticket ID if missing or requested
+    if (!rawTicketId) {
+      rawTicketId = `TEDX-2026-${String(nextAutoId++).padStart(3, '0')}`;
+    }
+
+    let rawName = mapping.attendee_name ? String(row[mapping.attendee_name] || '').trim() : '';
+    // Fallback name search across columns if mapped column was empty in this specific row
+    if (!rawName) {
+      for (const [k, v] of Object.entries(row)) {
+        const lk = k.toLowerCase();
+        if ((lk.includes('name') || lk.includes('attendee')) && !lk.includes('college') && v && String(v).trim()) {
+          rawName = String(v).trim();
+          break;
+        }
+      }
+    }
+
+    let rawEmail = mapping.email ? String(row[mapping.email] || '').trim() : '';
+    if (!rawEmail) {
+      for (const [k, v] of Object.entries(row)) {
+        const lk = k.toLowerCase();
+        if (lk.includes('email') && v && String(v).trim()) {
+          rawEmail = String(v).trim();
+          break;
+        }
+      }
+    }
+
     const rawPassType = mapping.pass_type ? String(row[mapping.pass_type] || '').trim() : 'General Admission';
     const rawNotes = mapping.notes ? String(row[mapping.notes] || '').trim() : '';
 
     const validationErrors: string[] = [];
-
-    // Preserved ticket ID validation
-    if (!rawTicketId) {
-      validationErrors.push('Missing Ticket ID');
-    }
 
     if (!rawName) {
       validationErrors.push('Missing Attendee Name');

@@ -232,9 +232,21 @@ export const ImportModal: React.FC<ImportModalProps> = ({
         {/* STEP 2: COLUMN MAPPING */}
         {step === 'mapping' && parsedWb && (
           <div className="space-y-6 py-2 overflow-y-auto">
+            {parsedWb.isGoogleFormExpanded && (
+              <div className="p-3.5 rounded-xl bg-emerald-950/40 border border-emerald-500/30 text-xs text-emerald-200 flex items-start gap-2.5">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div>
+                  <strong className="text-white">Google Form Registrations Detected:</strong>{' '}
+                  Expanded {parsedWb.originalRowCount} form submissions into{' '}
+                  <strong className="text-emerald-300">{parsedWb.rawRows.length} individual attendee tickets</strong>{' '}
+                  (group passes separated into individual attendee passes). Sequential Ticket IDs (TEDX-2026-xxx) are assigned automatically!
+                </div>
+              </div>
+            )}
+
             <div className="flex items-center justify-between p-3 rounded-xl bg-zinc-900 border border-zinc-800 text-xs">
               <span className="text-zinc-300">
-                Active Sheet: <strong>{parsedWb.activeSheet}</strong> ({parsedWb.rawRows.length} rows found)
+                Active Sheet: <strong>{parsedWb.activeSheet}</strong> ({parsedWb.rawRows.length} attendee entries)
               </span>
               <span className="text-emerald-400 font-semibold">Columns Auto-Detected</span>
             </div>
@@ -242,21 +254,22 @@ export const ImportModal: React.FC<ImportModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-300 mb-1">
-                  Ticket ID Column <span className="text-[#eb0028]">*</span>
+                  Ticket ID Column
                 </label>
                 <select
                   value={mapping.ticket_id}
                   onChange={(e) => handleMappingChange('ticket_id', e.target.value)}
                   className="w-full bg-[#0d0e12] border border-[#2b2d3d] rounded-lg px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-[#eb0028]"
                 >
-                  <option value="">-- Select Ticket ID Column --</option>
+                  <option value="__AUTO_GENERATE__">⚡ Auto-Generate Sequential IDs (TEDX-2026-xxx)</option>
+                  <option value="">-- Select Specific Column If Present --</option>
                   {parsedWb.headers.map((h) => (
                     <option key={h} value={h}>
                       {h}
                     </option>
                   ))}
                 </select>
-                <p className="text-[11px] text-zinc-500 mt-1">Preserves existing IDs without replacing them.</p>
+                <p className="text-[11px] text-zinc-500 mt-1">Preserves existing IDs or generates sequential IDs automatically.</p>
               </div>
 
               <div>
@@ -340,7 +353,7 @@ export const ImportModal: React.FC<ImportModalProps> = ({
               </button>
               <button
                 onClick={() => setStep('preview')}
-                disabled={!mapping.ticket_id || !mapping.attendee_name}
+                disabled={!mapping.attendee_name || (!mapping.ticket_id && mapping.ticket_id !== '__AUTO_GENERATE__')}
                 className="px-5 py-2 rounded-lg bg-[#eb0028] hover:bg-[#c40022] text-xs font-semibold text-white transition-all cursor-pointer disabled:opacity-50"
               >
                 Continue to Preview ({previewRows.length} Rows) &rarr;
